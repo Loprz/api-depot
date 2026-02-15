@@ -1,0 +1,8 @@
+# Railway deploy config for api-depot
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node dist/main"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
