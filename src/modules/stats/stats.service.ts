@@ -48,11 +48,15 @@ export class StatService {
   }
 
   private async initClients() {
-    const clientsToMonitor: Client[] = await this.clientService.findMany({
-      legacyId: In(Object.values(CLIENTS_TO_MONITOR)),
-    });
-
-    this.clientsToMonitorIndex = keyBy(clientsToMonitor, 'id');
+    try {
+      const clientsToMonitor: Client[] = await this.clientService.findMany({
+        legacyId: In(Object.values(CLIENTS_TO_MONITOR)),
+      });
+      this.clientsToMonitorIndex = keyBy(clientsToMonitor, 'id');
+    } catch {
+      // Table may not exist yet (migrations not run); keep app up for depot routes
+      this.clientsToMonitorIndex = keyBy([], 'id');
+    }
   }
 
   public async findFirstPublications(
