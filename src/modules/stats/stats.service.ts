@@ -12,13 +12,17 @@ import { keyBy, groupBy, mapValues } from 'lodash';
 
 import { DateFromToQueryTransformed } from '@/lib/class/pipes/date_from_to.pipe';
 import { RevisionService } from '@/modules/revision/revision.service';
-import { Revision } from '@/modules/revision/revision.entity';
+import {
+  Revision,
+  StatusRevisionEnum,
+} from '@/modules/revision/revision.entity';
 import { ClientService } from '@/modules/client/client.service';
 import { FirstPublicationDTO } from './dto/first_pulication.dto';
 import { PublicationDTO } from './dto/publication.dto';
 import { Client } from '../client/client.entity';
 import { Between, In } from 'typeorm';
 import { MetricsIncubateurDTO } from './dto/metrics_incubateur.dto';
+import { ValidationTelemetryDTO } from './dto/validation_telemetry.dto';
 
 const CLIENTS_TO_MONITOR = {
   mesAdresses: 'mes-adresses',
@@ -145,6 +149,89 @@ export class StatService {
           wau: subWeeks(now, 1) <= revision.publishedAt ? 1 : 0,
         },
       })),
+    };
+  }
+
+  private inferLegacyProfile(revision: Revision) {
+    const infos = revision.validation?.infos || [];
+
+    if (infos.includes('validation.permissive_enabled')) {
+      return 'permissive';
+    }
+
+    if (infos.includes('validation.profile.us.downgraded_errors')) {
+      return 'us';
+    }
+
+    return 'unknown';
+  }
+
+  public async findValidationTelemetry(
+    dates: DateFromToQueryTransformed,
+    top = 10,
+  ): Promise<ValidationTelemetryDTO> {
+    const revisions = await this.revisionService.findMany({
+      publishedAt: Between(dates.from, dates.to),
+      status: StatusRevisionEnum.PUBLISHED,
+    });
+
+    const profileCounts = {
+      strict: 0,
+      us: 0,
+      permissive: 0,
+      unknown: 0,
+    };
+
+    const downgradedErrorCountByCode: Record<string, number> = {};
+    let revisionsWithValidation = 0;
+    let revisionsWithDowngradedErrors = 0;
+
+    for (const revision of revisions) {
+      const validation = revision.validation;
+
+      if (!validation) {
+        profileCounts.unknown += 1;
+        continue;
+      }
+
+      revisionsWithValidation += 1;
+
+      const profile = validation.profile || this.inferLegacyProfile(revision);
+      const normalizedProfile: keyof typeof profileCounts =
+        profile === 'strict' ||
+        profile === 'us' ||
+        profile === 'permissive' ||
+        profile === 'unknown'
+          ? profile
+          : 'unknown';
+      profileCounts[normalizedProfile] += 1;
+
+      const downgradedErrors = [...new Set(validation.downgradedErrors || [])];
+      if (downgradedErrors.length > 0) {
+        revisionsWithDowngradedErrors += 1;
+      }
+
+      for (const errorCode of downgradedErrors) {
+        downgradedErrorCountByCode[errorCode] =
+          (downgradedErrorCountByCode[errorCode] || 0) + 1;
+      }
+    }
+
+    const topDowngradedErrors = Object.entries(downgradedErrorCountByCode)
+      .map(([code, count]) => ({ code, count }))
+      .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code))
+      .slice(0, Math.max(1, top));
+
+    return {
+      window: {
+        from: format(dates.from, 'yyyy-MM-dd'),
+        to: format(dates.to, 'yyyy-MM-dd'),
+      },
+      publishedRevisions: revisions.length,
+      revisionsWithValidation,
+      revisionsWithDowngradedErrors,
+      profileCounts,
+      topDowngradedErrors,
     };
   }
 }

@@ -23,6 +23,9 @@ export class Validation {
   valid: boolean;
 
   @ApiProperty({ type: String, required: false })
+  profile?: 'strict' | 'us' | 'permissive';
+
+  @ApiProperty({ type: String, required: false })
   validatorVersion?: string;
 
   @ApiProperty()
@@ -36,6 +39,9 @@ export class Validation {
 
   @ApiProperty({ type: String, required: false, isArray: true })
   infos?: string[];
+
+  @ApiProperty({ type: String, required: false, isArray: true })
+  downgradedErrors?: string[];
 
   @ApiProperty({ type: Number, required: false })
   rowsCount?: number;

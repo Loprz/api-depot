@@ -118,6 +118,7 @@ export class ValidationService {
           ...baseInfos,
           'validation.permissive_enabled',
         ]),
+        downgradedErrors: this.normalizeUnique(errors),
       };
     }
 
@@ -153,6 +154,7 @@ export class ValidationService {
             ? ['validation.profile.us.downgraded_errors']
             : []),
         ]),
+        downgradedErrors: this.normalizeUnique(downgradedErrors),
       };
     }
 
@@ -160,6 +162,7 @@ export class ValidationService {
       errors: this.normalizeUnique(errors),
       warnings: baseWarnings,
       infos: baseInfos,
+      downgradedErrors: [],
     };
   }
 
@@ -237,6 +240,7 @@ export class ValidationService {
     codeCommune: string,
     client: Client,
   ): Promise<Validation> {
+    const profile = this.getValidationProfile();
     const { parseOk, parseErrors, profilErrors, rows } = (await validate(
       fileData,
       {
@@ -247,8 +251,10 @@ export class ValidationService {
     if (!parseOk) {
       return {
         valid: false,
+        profile,
         validatorVersion,
         parseErrors,
+        downgradedErrors: [],
       };
     }
 
@@ -279,7 +285,6 @@ export class ValidationService {
       warnings.push('rows.delete_many_addresses');
     }
 
-    const profile = this.getValidationProfile();
     const normalizedValidation = this.applyProfile({
       profile,
       codeCommune,
@@ -290,10 +295,12 @@ export class ValidationService {
 
     return {
       valid: normalizedValidation.errors.length === 0,
+      profile,
       validatorVersion,
       errors: normalizedValidation.errors,
       warnings: normalizedValidation.warnings,
       infos: normalizedValidation.infos,
+      downgradedErrors: normalizedValidation.downgradedErrors,
       rowsCount,
     };
   }
