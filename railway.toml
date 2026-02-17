@@ -3,6 +3,8 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "node dist/main"
+# Env toggles:
+# - RUN_DB_MIGRATIONS=1 to gate startup on successful migrations
+startCommand = "bash ./scripts/railway-start.sh"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10

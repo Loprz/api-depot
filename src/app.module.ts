@@ -19,6 +19,7 @@ import { Revision } from './modules/revision/revision.entity';
 import { File } from './modules/file/file.entity';
 import { Habilitation } from './modules/habilitation/habilitation.entity';
 import { Perimeter } from './modules/chef_de_file/perimeters.entity';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -82,7 +83,7 @@ import { Perimeter } from './modules/chef_de_file/perimeters.entity';
     RevisionModule,
     StatModule,
   ],
-  controllers: [],
+  controllers: [HealthController],
   providers: [],
 })
 export class AppModule {}
