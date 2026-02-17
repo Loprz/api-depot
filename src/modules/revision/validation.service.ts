@@ -14,6 +14,22 @@ import { Validation } from './revision.entity';
 import { Client } from '../client/client.entity';
 import { BanService } from '../ban/ban.service';
 
+type ValidationProfile = 'strict' | 'us' | 'permissive';
+
+const VALIDATION_PROFILE_VALUES: ValidationProfile[] = [
+  'strict',
+  'us',
+  'permissive',
+];
+
+const US_PROFILE_DEFAULT_DOWNGRADED_ERRORS = ['row.longlat_invalides'];
+
+const US_PROFILE_NEVER_DOWNGRADED_ERRORS = new Set<string>([
+  'commune_insee.valeur_inattendue',
+  'commune_insee.out_of_perimeter',
+  'rows.delete_too_many_addresses',
+]);
+
 @Injectable()
 export class ValidationService {
   constructor(
@@ -23,6 +39,129 @@ export class ValidationService {
     private banService: BanService,
     private readonly logger: Logger,
   ) {}
+
+  private normalizeUnique(codes: string[]): string[] {
+    return [...new Set(codes)];
+  }
+
+  private getValidationProfile(): ValidationProfile {
+    const rawProfile = (process.env.API_DEPOT_VALIDATION_PROFILE || '')
+      .trim()
+      .toLowerCase();
+
+    if (VALIDATION_PROFILE_VALUES.includes(rawProfile as ValidationProfile)) {
+      return rawProfile as ValidationProfile;
+    }
+
+    const legacyPermissive =
+      process.env.API_DEPOT_PERMISSIVE_VALIDATION === '1';
+
+    if (!rawProfile && legacyPermissive) {
+      this.logger.warn(
+        'API_DEPOT_PERMISSIVE_VALIDATION is deprecated, use API_DEPOT_VALIDATION_PROFILE=permissive',
+        ValidationService.name,
+      );
+      return 'permissive';
+    }
+
+    if (rawProfile) {
+      this.logger.warn(
+        `Unknown API_DEPOT_VALIDATION_PROFILE='${rawProfile}', fallback to strict`,
+        ValidationService.name,
+      );
+    }
+
+    return 'strict';
+  }
+
+  private getUsDowngradedErrorCodes(): Set<string> {
+    const configuredCodes = (
+      process.env.API_DEPOT_VALIDATION_US_DOWNGRADED_ERRORS || ''
+    )
+      .split(',')
+      .map((code) => code.trim())
+      .filter(Boolean);
+
+    if (configuredCodes.length === 0) {
+      return new Set(US_PROFILE_DEFAULT_DOWNGRADED_ERRORS);
+    }
+
+    return new Set(configuredCodes);
+  }
+
+  private applyProfile({
+    profile,
+    codeCommune,
+    errors,
+    warnings,
+    infos,
+  }: {
+    profile: ValidationProfile;
+    codeCommune: string;
+    errors: string[];
+    warnings: string[];
+    infos: string[];
+  }) {
+    const baseWarnings = this.normalizeUnique(warnings);
+    const baseInfos = this.normalizeUnique(infos);
+
+    if (profile === 'permissive' && errors.length > 0) {
+      this.logger.warn(
+        `Permissive validation profile enabled: forcing valid=true for commune ${codeCommune}`,
+        ValidationService.name,
+      );
+
+      return {
+        errors: [],
+        warnings: this.normalizeUnique([...baseWarnings, ...errors]),
+        infos: this.normalizeUnique([
+          ...baseInfos,
+          'validation.permissive_enabled',
+        ]),
+      };
+    }
+
+    if (profile === 'us' && errors.length > 0) {
+      const downgradedErrorCodes = this.getUsDowngradedErrorCodes();
+      const blockingErrors: string[] = [];
+      const downgradedErrors: string[] = [];
+
+      for (const errorCode of errors) {
+        if (
+          downgradedErrorCodes.has(errorCode) &&
+          !US_PROFILE_NEVER_DOWNGRADED_ERRORS.has(errorCode)
+        ) {
+          downgradedErrors.push(errorCode);
+        } else {
+          blockingErrors.push(errorCode);
+        }
+      }
+
+      if (downgradedErrors.length > 0) {
+        this.logger.warn(
+          `US validation profile downgraded ${downgradedErrors.length} error(s) to warning for commune ${codeCommune}`,
+          ValidationService.name,
+        );
+      }
+
+      return {
+        errors: this.normalizeUnique(blockingErrors),
+        warnings: this.normalizeUnique([...baseWarnings, ...downgradedErrors]),
+        infos: this.normalizeUnique([
+          ...baseInfos,
+          ...(downgradedErrors.length > 0
+            ? ['validation.profile.us.downgraded_errors']
+            : []),
+        ]),
+      };
+    }
+
+    return {
+      errors: this.normalizeUnique(errors),
+      warnings: baseWarnings,
+      infos: baseInfos,
+    };
+  }
 
   private getRowCodeCommune(row: ValidateRowFullType): string {
     if (row.parsedValues.commune_insee) {
@@ -140,31 +279,21 @@ export class ValidationService {
       warnings.push('rows.delete_many_addresses');
     }
 
-    const permissiveValidation =
-      process.env.API_DEPOT_PERMISSIVE_VALIDATION === '1';
-
-    if (permissiveValidation && errors.length > 0) {
-      this.logger.warn(
-        `Permissive validation enabled: forcing valid=true for commune ${codeCommune}`,
-        ValidationService.name,
-      );
-
-      return {
-        valid: true,
-        validatorVersion,
-        errors: [],
-        warnings: [...warnings, ...errors],
-        infos: [...infos, 'validation.permissive_enabled'],
-        rowsCount,
-      };
-    }
-
-    return {
-      valid: errors.length === 0,
-      validatorVersion,
+    const profile = this.getValidationProfile();
+    const normalizedValidation = this.applyProfile({
+      profile,
+      codeCommune,
       errors,
       warnings,
       infos,
+    });
+
+    return {
+      valid: normalizedValidation.errors.length === 0,
+      validatorVersion,
+      errors: normalizedValidation.errors,
+      warnings: normalizedValidation.warnings,
+      infos: normalizedValidation.infos,
       rowsCount,
     };
   }
