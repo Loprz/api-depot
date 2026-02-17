@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import * as hasha from 'hasha';
+import { ObjectId } from 'bson';
 
 import { S3Service } from './s3.service';
 import { File, TypeFileEnum } from './file.entity';
@@ -20,7 +21,21 @@ export class FileService {
     this.logger.debug(
       `START UPLOAD FILE S3 for ${revisionId}, size ${Buffer.byteLength(fileData)} at ${new Date(now).toDateString()}`,
     );
-    const id = await this.s3Service.writeFile(fileData);
+    let id: string;
+    let content: Buffer | null = null;
+
+    try {
+      id = await this.s3Service.writeFile(fileData);
+    } catch (error) {
+      // Fallback to database storage when S3 is not configured/unavailable.
+      id = new ObjectId().toHexString();
+      content = fileData;
+      this.logger.warn(
+        `S3 upload unavailable for revision ${revisionId}, storing BAL file in database`,
+        FileService.name,
+      );
+    }
+
     this.logger.debug(
       `END UPLOAD FILE S3 for ${revisionId} in ${Date.now() - now}`,
     );
@@ -30,6 +45,7 @@ export class FileService {
       type: TypeFileEnum.BAL,
       size: fileData.length,
       hash: hasha(fileData, { algorithm: 'sha256' }),
+      content,
     });
     return this.fileRepository.save(entityToSave);
   }
@@ -48,6 +64,10 @@ export class FileService {
         `Aucun fichier de type 'bal' associé à la révision ${revisionId}`,
         HttpStatus.NOT_FOUND,
       );
+    }
+
+    if (file.content) {
+      return Buffer.from(file.content);
     }
 
     const data: Buffer = await this.s3Service.getFile(file.id);

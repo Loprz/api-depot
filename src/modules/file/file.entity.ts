@@ -33,6 +33,10 @@ export class File {
   @Column('text', { nullable: false, default: false })
   hash: string;
 
+  @ApiProperty({ required: false, nullable: true })
+  @Column('bytea', { nullable: true })
+  content?: Buffer | null;
+
   @ApiProperty({ enum: TypeFileEnum })
   @Column('enum', {
     enum: TypeFileEnum,

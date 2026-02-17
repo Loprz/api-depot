@@ -140,6 +140,25 @@ export class ValidationService {
       warnings.push('rows.delete_many_addresses');
     }
 
+    const permissiveValidation =
+      process.env.API_DEPOT_PERMISSIVE_VALIDATION === '1';
+
+    if (permissiveValidation && errors.length > 0) {
+      this.logger.warn(
+        `Permissive validation enabled: forcing valid=true for commune ${codeCommune}`,
+        ValidationService.name,
+      );
+
+      return {
+        valid: true,
+        validatorVersion,
+        errors: [],
+        warnings: [...warnings, ...errors],
+        infos: [...infos, 'validation.permissive_enabled'],
+        rowsCount,
+      };
+    }
+
     return {
       valid: errors.length === 0,
       validatorVersion,

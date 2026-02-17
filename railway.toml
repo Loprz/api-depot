@@ -1,4 +1,4 @@
-# Railway deploy config for api-depot
+# Railway deploy config for api-depot (monorepo root = api-depot)
 [build]
 builder = "nixpacks"
 
