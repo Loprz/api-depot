@@ -49,3 +49,42 @@ export class ValidationTelemetryDTO {
   @ApiProperty({ type: () => DowngradedErrorCountDTO, isArray: true })
   topDowngradedErrors: DowngradedErrorCountDTO[];
 }
+
+export class ValidationTelemetryTimeseriesPointDTO {
+  @ApiProperty()
+  date: string;
+
+  @ApiProperty()
+  publishedRevisions: number;
+
+  @ApiProperty()
+  revisionsWithValidation: number;
+
+  @ApiProperty()
+  revisionsWithDowngradedErrors: number;
+
+  @ApiProperty({ type: () => ValidationProfileCountsDTO })
+  profileCounts: ValidationProfileCountsDTO;
+
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      type: 'number',
+    },
+  })
+  downgradedErrorCounts: Record<string, number>;
+}
+
+export class ValidationTelemetryTimeseriesDTO {
+  @ApiProperty({ type: () => ValidationTelemetryWindowDTO })
+  window: ValidationTelemetryWindowDTO;
+
+  @ApiProperty({ type: String, isArray: true })
+  topCodes: string[];
+
+  @ApiProperty({
+    type: () => ValidationTelemetryTimeseriesPointDTO,
+    isArray: true,
+  })
+  points: ValidationTelemetryTimeseriesPointDTO[];
+}

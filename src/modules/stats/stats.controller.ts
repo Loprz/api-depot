@@ -29,7 +29,10 @@ import {
   MetricsIncubateurDTO,
   OffsetDTO,
 } from './dto/metrics_incubateur.dto';
-import { ValidationTelemetryDTO } from './dto/validation_telemetry.dto';
+import {
+  ValidationTelemetryDTO,
+  ValidationTelemetryTimeseriesDTO,
+} from './dto/validation_telemetry.dto';
 
 @ApiTags('stats')
 @Controller('stats')
@@ -128,6 +131,38 @@ export class StatController {
 
     const result: ValidationTelemetryDTO =
       await this.statService.findValidationTelemetry(dates, safeTop);
+    res.status(HttpStatus.OK).json(result);
+  }
+
+  @Get('validation-telemetry/timeseries')
+  @ApiOperation({
+    summary: 'Validation telemetry timeseries',
+    operationId: 'findValidationTelemetryTimeseries',
+  })
+  @ApiQuery({ type: DateFromToQuery })
+  @ApiQuery({
+    name: 'top',
+    required: false,
+    description: 'Nombre max de codes erreur rétrogradés à retourner',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    type: ValidationTelemetryTimeseriesDTO,
+  })
+  @ApiBearerAuth('admin-token')
+  @UseGuards(AdminGuard)
+  async findValidationTelemetryTimeseries(
+    @Query(DateFromToQueryPipe)
+    dates: DateFromToQueryTransformed,
+    @Query('top') top: string,
+    @Res() res: Response,
+  ) {
+    const parsedTop = Number(top);
+    const safeTop =
+      Number.isFinite(parsedTop) && parsedTop > 0 ? Math.floor(parsedTop) : 10;
+
+    const result: ValidationTelemetryTimeseriesDTO =
+      await this.statService.findValidationTelemetryTimeseries(dates, safeTop);
     res.status(HttpStatus.OK).json(result);
   }
 }
