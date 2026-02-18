@@ -17,7 +17,10 @@ import {
   AuthorizationStrategyEnum,
   Client as Client2,
 } from '@/modules/client/client.entity';
-import { Revision } from '@/modules/revision/revision.entity';
+import {
+  Revision,
+  StatusRevisionEnum,
+} from '@/modules/revision/revision.entity';
 import { StatModule } from './stats.module';
 import { MailerService } from '@nestjs-modules/mailer';
 import { Mandataire } from '../mandataire/mandataire.entity';
@@ -379,6 +382,221 @@ describe('STATS MODULE', () => {
       expect(results[3].metrics.yau).toBe(1);
       expect(results[3].metrics.mau).toBe(1);
       expect(results[3].metrics.wau).toBe(1);
+    });
+  });
+
+  describe('GET /stats/validation-telemetry', () => {
+    it('GET /stats/validation-telemetry forbiden', async () => {
+      await request(app.getHttpServer())
+        .get(`/stats/validation-telemetry`)
+        .expect(403);
+    });
+
+    it('GET /stats/validation-telemetry aggregates profiles and downgraded errors', async () => {
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PUBLISHED,
+        publishedAt: parse('2024-01-10', 'yyyy-MM-dd', new Date()),
+        validation: {
+          valid: true,
+          profile: 'us',
+          errors: [],
+          warnings: [],
+          infos: [],
+          downgradedErrors: ['row.a', 'row.a', 'row.b'],
+        },
+      });
+
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PUBLISHED,
+        publishedAt: parse('2024-01-11', 'yyyy-MM-dd', new Date()),
+        validation: {
+          valid: true,
+          errors: [],
+          warnings: [],
+          infos: ['validation.permissive_enabled'],
+          downgradedErrors: ['row.b'],
+        },
+      });
+
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PUBLISHED,
+        publishedAt: parse('2024-01-12', 'yyyy-MM-dd', new Date()),
+        validation: {
+          valid: true,
+          errors: [],
+          warnings: [],
+          infos: ['validation.profile.us.downgraded_errors'],
+          downgradedErrors: [],
+        },
+      });
+
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PUBLISHED,
+        publishedAt: parse('2024-01-13', 'yyyy-MM-dd', new Date()),
+        validation: null,
+      });
+
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PENDING,
+        publishedAt: parse('2024-01-14', 'yyyy-MM-dd', new Date()),
+        validation: {
+          valid: true,
+          profile: 'strict',
+          errors: [],
+          warnings: [],
+          infos: [],
+          downgradedErrors: ['row.z'],
+        },
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(`/stats/validation-telemetry?from=2024-01-01&to=2024-01-31&top=1`)
+        .set('authorization', `Bearer ${process.env.ADMIN_TOKEN}`)
+        .expect(200);
+
+      expect(response.body.window).toEqual({
+        from: '2024-01-01',
+        to: '2024-01-31',
+      });
+      expect(response.body.publishedRevisions).toBe(4);
+      expect(response.body.revisionsWithValidation).toBe(3);
+      expect(response.body.revisionsWithDowngradedErrors).toBe(2);
+      expect(response.body.profileCounts).toEqual({
+        strict: 0,
+        us: 2,
+        permissive: 1,
+        unknown: 1,
+      });
+      expect(response.body.topDowngradedErrors).toEqual([
+        {
+          code: 'row.b',
+          count: 2,
+        },
+      ]);
+    });
+  });
+
+  describe('GET /stats/validation-telemetry/timeseries', () => {
+    it('GET /stats/validation-telemetry/timeseries forbiden', async () => {
+      await request(app.getHttpServer())
+        .get(`/stats/validation-telemetry/timeseries`)
+        .expect(403);
+    });
+
+    it('GET /stats/validation-telemetry/timeseries returns daily points with top downgraded codes', async () => {
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PUBLISHED,
+        publishedAt: parse('2024-01-01', 'yyyy-MM-dd', new Date()),
+        validation: {
+          valid: true,
+          profile: 'us',
+          errors: [],
+          warnings: [],
+          infos: [],
+          downgradedErrors: ['row.b', 'row.b'],
+        },
+      });
+
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PUBLISHED,
+        publishedAt: parse('2024-01-02', 'yyyy-MM-dd', new Date()),
+        validation: {
+          valid: true,
+          profile: 'strict',
+          errors: [],
+          warnings: [],
+          infos: [],
+          downgradedErrors: [],
+        },
+      });
+
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PUBLISHED,
+        publishedAt: parse('2024-01-02', 'yyyy-MM-dd', new Date()),
+        validation: null,
+      });
+
+      await createRevision({
+        codeCommune: '91400',
+        status: StatusRevisionEnum.PENDING,
+        publishedAt: parse('2024-01-03', 'yyyy-MM-dd', new Date()),
+        validation: {
+          valid: true,
+          profile: 'us',
+          errors: [],
+          warnings: [],
+          infos: [],
+          downgradedErrors: ['row.z'],
+        },
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(
+          `/stats/validation-telemetry/timeseries?from=2024-01-01&to=2024-01-03&top=2`,
+        )
+        .set('authorization', `Bearer ${process.env.ADMIN_TOKEN}`)
+        .expect(200);
+
+      expect(response.body.window).toEqual({
+        from: '2024-01-01',
+        to: '2024-01-03',
+      });
+      expect(response.body.topCodes).toEqual(['row.b']);
+      expect(response.body.points).toEqual([
+        {
+          date: '2024-01-01',
+          publishedRevisions: 1,
+          revisionsWithValidation: 1,
+          revisionsWithDowngradedErrors: 1,
+          profileCounts: {
+            strict: 0,
+            us: 1,
+            permissive: 0,
+            unknown: 0,
+          },
+          downgradedErrorCounts: {
+            'row.b': 1,
+          },
+        },
+        {
+          date: '2024-01-02',
+          publishedRevisions: 2,
+          revisionsWithValidation: 1,
+          revisionsWithDowngradedErrors: 0,
+          profileCounts: {
+            strict: 1,
+            us: 0,
+            permissive: 0,
+            unknown: 1,
+          },
+          downgradedErrorCounts: {
+            'row.b': 0,
+          },
+        },
+        {
+          date: '2024-01-03',
+          publishedRevisions: 0,
+          revisionsWithValidation: 0,
+          revisionsWithDowngradedErrors: 0,
+          profileCounts: {
+            strict: 0,
+            us: 0,
+            permissive: 0,
+            unknown: 0,
+          },
+          downgradedErrorCounts: {
+            'row.b': 0,
+          },
+        },
+      ]);
     });
   });
 });
