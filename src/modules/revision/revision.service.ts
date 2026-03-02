@@ -2,6 +2,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { pick } from 'lodash';
 
 import { isCommuneActuelle } from '@/lib/utils/cog.utils';
+import { isUsValidationProfile } from '@/lib/utils/jurisdiction.utils';
 import { PublicClient } from '@/modules/client/dto/public_client.dto';
 import { ClientService } from '@/modules/client/client.service';
 import { FileService } from '@/modules/file/file.service';
@@ -166,6 +167,10 @@ export class RevisionService {
         clientId: true,
       },
     });
+
+    if (isUsValidationProfile()) {
+      return revisions;
+    }
 
     return revisions.filter((r) => isCommuneActuelle(r.codeCommune));
   }

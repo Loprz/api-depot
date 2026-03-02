@@ -22,7 +22,11 @@ const VALIDATION_PROFILE_VALUES: ValidationProfile[] = [
   'permissive',
 ];
 
-const US_PROFILE_DEFAULT_DOWNGRADED_ERRORS = ['row.longlat_invalides'];
+const US_PROFILE_DEFAULT_DOWNGRADED_ERRORS = [
+  'row.longlat_invalides',
+  'commune_insee.commune_invalide',
+  'cle_interop.commune_invalide',
+];
 
 const US_PROFILE_NEVER_DOWNGRADED_ERRORS = new Set<string>([
   'commune_insee.valeur_inattendue',
@@ -82,11 +86,10 @@ export class ValidationService {
       .map((code) => code.trim())
       .filter(Boolean);
 
-    if (configuredCodes.length === 0) {
-      return new Set(US_PROFILE_DEFAULT_DOWNGRADED_ERRORS);
-    }
-
-    return new Set(configuredCodes);
+    return new Set([
+      ...US_PROFILE_DEFAULT_DOWNGRADED_ERRORS,
+      ...configuredCodes,
+    ]);
   }
 
   private applyProfile({

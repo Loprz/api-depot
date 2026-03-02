@@ -7,12 +7,12 @@ import {
 import { Response, NextFunction } from 'express';
 
 import { CustomRequest } from '@/lib/types/request.type';
-import { isCommuneActuelle } from '@/lib/utils/cog.utils';
+import { isJurisdictionCode } from '@/lib/utils/jurisdiction.utils';
 
 @Injectable()
 export class CommuneActuelleMiddleware implements NestMiddleware {
   async use(req: CustomRequest, res: Response, next: NextFunction) {
-    if (!isCommuneActuelle(req.params.codeCommune)) {
+    if (!isJurisdictionCode(req.params.codeCommune, { actuelle: true })) {
       throw new HttpException(
         `Le code commune n'existe pas`,
         HttpStatus.NOT_FOUND,
