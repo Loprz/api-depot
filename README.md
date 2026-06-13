@@ -44,6 +44,11 @@ Lancer l'api de développement :
 $ yarn dev
 ```
 
+Pour le port US en local, vous pouvez définir `API_DEPOT_VALIDATION_PROFILE=us`
+et laisser les variables `S3_*` vides. Dans ce mode local, les nouveaux fichiers
+BAL sont stockés dans la base de données (`files.content`) au lieu de nécessiter
+un bucket S3 factice.
+
 ### Production
 
 Démarrer l'api (port 5000 par défaut) :

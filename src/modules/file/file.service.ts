@@ -19,7 +19,7 @@ export class FileService {
   public async createOne(revisionId: string, fileData: Buffer): Promise<File> {
     const now = Date.now();
     this.logger.debug(
-      `START UPLOAD FILE S3 for ${revisionId}, size ${Buffer.byteLength(fileData)} at ${new Date(now).toDateString()}`,
+      `START FILE STORAGE for ${revisionId}, size ${Buffer.byteLength(fileData)} at ${new Date(now).toDateString()}`,
     );
     let id: string;
     let content: Buffer | null = null;
@@ -37,7 +37,7 @@ export class FileService {
     }
 
     this.logger.debug(
-      `END UPLOAD FILE S3 for ${revisionId} in ${Date.now() - now}`,
+      `END FILE STORAGE for ${revisionId} in ${Date.now() - now}`,
     );
     const entityToSave: File = this.fileRepository.create({
       id,
